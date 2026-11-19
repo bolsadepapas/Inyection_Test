@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laboratorio SQL Injection — OWASP A05:2025</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --border: #334155;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --vuln: #ef4444;
+            --vuln-bg: rgba(239, 68, 68, 0.15);
+            --safe: #10b981;
+            --safe-bg: rgba(16, 185, 129, 0.15);
+            --accent: var(--vuln);
+            --accent-bg: var(--vuln-bg);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 2rem;
+            line-height: 1.5;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        header {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            padding-bottom: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        h1 { font-size: 1.5rem; font-weight: 700; }
+        .subtitle { color: var(--muted); font-size: 0.9rem; }
+        .mode-toggle {
+            display: flex;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        .mode-btn {
+            padding: 0.6rem 1.2rem;
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .mode-btn.active-vuln {
+            background: var(--vuln);
+            color: #fff;
+        }
+        .mode-btn.active-safe {
+            background: var(--safe);
+            color: #fff;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-top: 4px solid var(--accent);
+            border-radius: 0.5rem;
+            padding: 1.25rem;
+        }
+        .card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 0.3rem;
+        }
+        .card p {
+            color: var(--muted);
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+        }
+        .form-group {
+            margin-bottom: 0.85rem;
+        }
+        label {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--muted);
+            margin-bottom: 0.25rem;
+        }
+        input {
+            width: 100%;
+            padding: 0.55rem 0.75rem;
+            border-radius: 0.375rem;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.9rem;
+        }
+        .btn-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        button.primary {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 0.55rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button.secondary {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 0.55rem 0.8rem;
+            border-radius: 0.375rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        button.secondary:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .evidence {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            padding: 1.25rem;
+        }
+        .evidence-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .badge {
+            padding: 0.25rem 0.6rem;
+            border-radius: 0.25rem;
+            font-family: ui-monospace, monospace;
+            font-size: 0.85rem;
+            font-weight: 700;
+            background: var(--border);
+        }
+        .sql-box, pre {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 0.375rem;
+            padding: 0.85rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .sql-box {
+            margin-bottom: 1rem;
+            color: #38bdf8;
+        }
+        .section-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+            margin-bottom: 0.35rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <div>
+            <h1>Laboratorio SQL Injection (OWASP A05:2025 / CWE-89)</h1>
+            <div class="subtitle">Demostración interactiva en Spring Boot + H2 en memoria</div>
+        </div>
+        <div class="mode-toggle">
+            <button id="btnModeVuln" class="mode-btn active-vuln" onclick="setMode('vulnerable')">
+                Modo Vulnerable (/api/vulnerable/*)
+            </button>
+            <button id="btnModeSafe" class="mode-btn" onclick="setMode('seguro')">
+                Modo Seguro (/api/seguro/*)
+            </button>
+        </div>
+    </header>
+
+    <div class="grid">
+        <!-- Panel 1: Escenario A -->
+        <div class="card">
+            <h2>Escenario A — Bypass de Login</h2>
+            <p>Autenticación de usuarios mediante POST <code>/api/<span class="mode-path">vulnerable</span>/login</code></p>
+            <div class="form-group">
+                <label for="loginUser">Username</label>
+                <input type="text" id="loginUser" placeholder="ej. admin">
+            </div>
+            <div class="form-group">
+                <label for="loginPass">Password</label>
+                <input type="text" id="loginPass" placeholder="Contraseña">
+            </div>
+            <div class="btn-row">
+                <button class="primary" onclick="ejecutarLogin()">Iniciar Sesión</button>
+                <button class="secondary" onclick="cargarPayloadLogin()">Cargar Payload Bypass (admin' -- )</button>
+            </div>
+        </div>
+
+        <!-- Panel 2: Escenario B -->
+        <div class="card">
+            <h2>Escenario B — Búsqueda / Exfiltración UNION SELECT</h2>
+            <p>Consulta de perfiles mediante GET <code>/api/<span class="mode-path">vulnerable</span>/buscar?username=...</code></p>
+            <div class="form-group">
+                <label for="searchUser">Username a buscar</label>
+                <input type="text" id="searchUser" placeholder="ej. ana.gomez">
+            </div>
+            <div class="btn-row">
+                <button class="primary" onclick="ejecutarBusqueda()">Buscar</button>
+                <button class="secondary" onclick="cargarUsuarioNormal()">Usuario Normal (ana.gomez)</button>
+                <button class="secondary" onclick="cargarPayloadUnion()">Cargar Payload UNION SELECT</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel de Evidencia en Vivo -->
+    <div class="evidence">
+        <div class="evidence-header">
+            <h2>Panel de Evidencia en Vivo</h2>
+            <span id="httpStatusBadge" class="badge">HTTP ---</span>
+        </div>
+
+        <div class="section-label">Sentencia SQL Ejecutada / Parametrizada</div>
+        <div id="sqlDisplay" class="sql-box">Esperando petición...</div>
+
+        <div class="section-label">Respuesta JSON del Servidor</div>
+        <pre id="jsonDisplay">{}</pre>
+    </div>
+</div>
+
+<script>
+    let currentMode = 'vulnerable';
+
+    function setMode(mode) {
+        currentMode = mode;
+        const root = document.documentElement;
+        const btnVuln = document.getElementById('btnModeVuln');
+        const btnSafe = document.getElementById('btnModeSafe');
+
+        if (mode === 'vulnerable') {
+            root.style.setProperty('--accent', 'var(--vuln)');
+            root.style.setProperty('--accent-bg', 'var(--vuln-bg)');
+            btnVuln.className = 'mode-btn active-vuln';
+            btnSafe.className = 'mode-btn';
+        } else {
+            root.style.setProperty('--accent', 'var(--safe)');
+            root.style.setProperty('--accent-bg', 'var(--safe-bg)');
+            btnVuln.className = 'mode-btn';
+            btnSafe.className = 'mode-btn active-safe';
+        }
+
+        document.querySelectorAll('.mode-path').forEach(el => {
+            el.textContent = mode;
+        });
+    }
+
+    function cargarPayloadLogin() {
+        document.getElementById('loginUser').value = "admin' -- ";
+        document.getElementById('loginPass').value = "cualquier_cosa";
+    }
+
+    function cargarUsuarioNormal() {
+        document.getElementById('searchUser').value = "ana.gomez";
+    }
+
+    function cargarPayloadUnion() {
+        document.getElementById('searchUser').value = "' UNION SELECT id, username, password, rol FROM usuarios -- ";
+    }
+
+    function actualizarEvidencia(status, data) {
+        const badge = document.getElementById('httpStatusBadge');
+        badge.textContent = `HTTP ${status}`;
+        badge.style.background = status === 200 ? '#10b981' : (status === 401 ? '#f59e0b' : '#ef4444');
+        badge.style.color = '#fff';
+
+        const sql = data.consultaEjecutada || data.consultaParametrizada || 'N/A';
+        document.getElementById('sqlDisplay').textContent = sql;
+        document.getElementById('jsonDisplay').textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function ejecutarLogin() {
+        const username = document.getElementById('loginUser').value;
+        const password = document.getElementById('loginPass').value;
+
+        try {
+            const res = await fetch(`/api/${currentMode}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            actualizarEvidencia(res.status, data);
+        } catch (err) {
+            actualizarEvidencia(500, { error: err.message });
+        }
+    }
+
+    async function ejecutarBusqueda() {
+        const username = document.getElementById('searchUser').value;
+
+        try {
+            const res = await fetch(`/api/${currentMode}/buscar?username=${encodeURIComponent(username)}`);
+            const data = await res.json();
+            actualizarEvidencia(res.status, data);
+        } catch (err) {
+            actualizarEvidencia(500, { error: err.message });
+        }
+    }
+</script>
+</body>
+</html>
